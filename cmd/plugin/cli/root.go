@@ -1,14 +1,15 @@
 package cli
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
 	"strings"
 	"time"
 
-	"github.com/{{ .Owner }}/{{ .Repo }}/pkg/logger"
-	"github.com/{{ .Owner }}/{{ .Repo }}/pkg/plugin"
+	"github.com/icyd/kubectl-apps-version/pkg/logger"
+	"github.com/icyd/kubectl-apps-version/pkg/plugin"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"github.com/tj/go-spin"
@@ -21,9 +22,9 @@ var (
 
 func RootCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:           "{{ .PluginName }}",
-		Short:         "",
-		Long:          `.`,
+		Use:           "kubectl-apps-version",
+		Short:         "short description",
+		Long:          `Long description.`,
 		SilenceErrors: true,
 		SilenceUsage:  true,
 		PreRun: func(cmd *cobra.Command, args []string) {
@@ -31,16 +32,16 @@ func RootCmd() *cobra.Command {
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			log := logger.NewLogger()
-			log.Info("")
 
 			s := spin.New()
-			finishedCh := make(chan bool, 1)
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
 			namespaceName := make(chan string, 1)
 			go func() {
 				lastNamespaceName := ""
 				for {
 					select {
-					case <-finishedCh:
+					case <-ctx.Done():
 						fmt.Printf("\r")
 						return
 					case n := <-namespaceName:
@@ -54,13 +55,46 @@ func RootCmd() *cobra.Command {
 					}
 				}
 			}()
-			defer func() {
-				finishedCh <- true
-			}()
 
-			if err := plugin.RunPlugin(KubernetesConfigFlags, namespaceName); err != nil {
+			namespace, err := cmd.Flags().GetString("namespace")
+			if err != nil {
+				log.Error(err)
+			}
+
+			allNamespaces, err := cmd.Flags().GetBool("all-namespaces")
+			if err != nil {
+				log.Error(err)
+			}
+
+			sts, err := cmd.Flags().GetBool("statefulsets")
+			if err != nil {
+				log.Error(err)
+			}
+
+			ds, err := cmd.Flags().GetBool("daemonsets")
+			if err != nil {
+				log.Error(err)
+			}
+
+			excludedNs, err := cmd.Flags().GetStringSlice("exclude")
+			if err != nil {
+				log.Error(err)
+			}
+
+			pluginConfig := plugin.PluginConfig{
+				Namespace:           namespace,
+				AllNamespaces:       allNamespaces,
+				ExcludedNs:          excludedNs,
+				IncludeStatefulSets: sts,
+				IncludeDaemonSets:   ds,
+			}
+
+			apps, err := plugin.RunPlugin(KubernetesConfigFlags, namespaceName, ctx, &pluginConfig)
+			if err != nil {
 				return errors.Unwrap(err)
 			}
+
+			apps.Print(os.Stdout)
 
 			log.Info("")
 
@@ -72,6 +106,11 @@ func RootCmd() *cobra.Command {
 
 	KubernetesConfigFlags = genericclioptions.NewConfigFlags(false)
 	KubernetesConfigFlags.AddFlags(cmd.Flags())
+
+	cmd.PersistentFlags().BoolP("all-namespaces", "A", false, "All namespaces")
+	cmd.Flags().StringSlice("exclude", []string{"kube-system"}, "List of namespaces regexp to exclude. If namespace is given this option is ignored")
+	cmd.Flags().Bool("statefulsets", false, "Include StatefulSets in search")
+	cmd.Flags().Bool("daemonsets", false, "Include DaemonSets in search")
 
 	viper.SetEnvKeyReplacer(strings.NewReplacer("-", "_"))
 	return cmd

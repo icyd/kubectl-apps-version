@@ -1,29 +1,13 @@
-
-export GO111MODULE=on
-
-.PHONY: test
-test:
-	go test ./pkg/... ./cmd/... -coverprofile cover.out
-
-.PHONY: bin
-bin: fmt vet
-	go build -o bin/{{ .PluginName }} github.com/{{ .Owner }}/{{ .Repo }}/cmd/plugin
-
-.PHONY: fmt
 fmt:
 	go fmt ./pkg/... ./cmd/...
 
-.PHONY: vet
 vet:
 	go vet ./pkg/... ./cmd/...
 
-.PHONY: kubernetes-deps
-kubernetes-deps:
-	go get k8s.io/client-go@v11.0.0
-	go get k8s.io/api@kubernetes-1.14.0
-	go get k8s.io/apimachinery@kubernetes-1.14.0
-	go get k8s.io/cli-runtime@kubernetes-1.14.0
+test:
+	go test ./pkg/... ./cmd/... -coverprofile cover.out
 
-.PHONY: setup
-setup:
-	make -C setup
+bin: fmt vet test
+	go build -o bin/kubectl-appsversion github.com/icyd/kubectl-apps-version/cmd/plugin
+
+.PHONY: test fmt vet bin
