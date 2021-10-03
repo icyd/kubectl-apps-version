@@ -110,6 +110,14 @@ func RunPlugin(configFlags *genericclioptions.ConfigFlags, outputCh chan string,
 		result = append(result, apps...)
 	}
 
+	if len(result) == 0 {
+		if namespace != "" {
+			fmt.Printf("No resources found in %v namespace.\n", namespace)
+		} else {
+			fmt.Println("No resources found.")
+		}
+	}
+
 	return result, nil
 }
 
@@ -153,5 +161,6 @@ func (apps AppVersions) Print(w io.Writer) {
 		ColumnDefinitions: header,
 		Rows:              rows,
 	}
+
 	printer.PrintObj(table, w)
 }
