@@ -79,6 +79,16 @@ func RunPlugin(configFlags *genericclioptions.ConfigFlags, outputCh chan string,
 		namespace = pluginConfig.Namespace
 	}
 
+	clientCfg, err := clientcmd.NewDefaultClientConfigLoadingRules().Load()
+	if err != nil {
+		return nil, fmt.Errorf("failed to read default configuration: %w", err)
+
+	}
+	currentNamespace := clientCfg.Contexts[clientCfg.CurrentContext].Namespace
+	if currentNamespace == "" {
+		currentNamespace = "default"
+	}
+
 	config, err := configFlags.ToRESTConfig()
 	if err != nil {
 		return nil, fmt.Errorf("failed to read kubeconfig: %w", err)
@@ -89,25 +99,48 @@ func RunPlugin(configFlags *genericclioptions.ConfigFlags, outputCh chan string,
 		return nil, fmt.Errorf("failed to create clientset: %w", err)
 	}
 
-	result, err = deploysInNamespace(clientset, outputCh, ctx, namespace)
-	if err != nil {
-		return nil, err
-	}
-
-	if pluginConfig.IncludeStatefulSets {
-		apps, err := stsInNamespace(clientset, outputCh, ctx, namespace)
+	if namespace != "" {
+		result, err = deploysInNamespace(clientset, outputCh, ctx, namespace)
 		if err != nil {
 			return nil, err
 		}
-		result = append(result, apps...)
-	}
 
-	if pluginConfig.IncludeDaemonSets {
-		apps, err := dsInNamespace(clientset, outputCh, ctx, namespace)
+		if pluginConfig.IncludeStatefulSets {
+			apps, err := stsInNamespace(clientset, outputCh, ctx, namespace)
+			if err != nil {
+				return nil, err
+			}
+			result = append(result, apps...)
+		}
+
+		if pluginConfig.IncludeDaemonSets {
+			apps, err := dsInNamespace(clientset, outputCh, ctx, namespace)
+			if err != nil {
+				return nil, err
+			}
+			result = append(result, apps...)
+		}
+	} else {
+		result, err = deploysAllNamespaces(clientset, outputCh, ctx, pluginConfig.ExcludedNs)
 		if err != nil {
 			return nil, err
 		}
-		result = append(result, apps...)
+
+		if pluginConfig.IncludeStatefulSets {
+			apps, err := stsAllNamespaces(clientset, outputCh, ctx, pluginConfig.ExcludedNs)
+			if err != nil {
+				return nil, err
+			}
+			result = append(result, apps...)
+		}
+
+		if pluginConfig.IncludeDaemonSets {
+			apps, err := dsAllNamespaces(clientset, outputCh, ctx, pluginConfig.ExcludedNs)
+			if err != nil {
+				return nil, err
+			}
+			result = append(result, apps...)
+		}
 	}
 
 	if len(result) == 0 {
@@ -161,6 +194,5 @@ func (apps AppVersions) Print(w io.Writer) {
 		ColumnDefinitions: header,
 		Rows:              rows,
 	}
-
 	printer.PrintObj(table, w)
 }

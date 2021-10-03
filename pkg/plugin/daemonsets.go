@@ -34,3 +34,27 @@ func dsInNamespace(clientset *kubernetes.Clientset, outputCh chan string, ctx co
 	outputCh <- fmt.Sprintf("Namespace %s", namespace)
 	return apps, nil
 }
+
+func dsAllNamespaces(clientset *kubernetes.Clientset, outputCh chan string, ctx context.Context, excludedNs []string) ([]AppVersion, error) {
+	apps := []AppVersion{}
+
+	namespaces, err := clientset.CoreV1().Namespaces().List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list namespaces: %w", err)
+	}
+
+	for _, namespace := range namespaces.Items {
+		if skipNamespace(namespace.Name, excludedNs) {
+			continue
+		}
+
+		app, err := dsInNamespace(clientset, outputCh, ctx, namespace.Name)
+		if err != nil {
+			return nil, fmt.Errorf("Error: %v", err)
+		}
+
+		apps = append(apps, app...)
+	}
+
+	return apps, nil
+}

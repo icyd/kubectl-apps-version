@@ -94,6 +94,7 @@ func RootCmd() *cobra.Command {
 				return errors.Unwrap(err)
 			}
 
+			fmt.Printf("\r")
 			apps.Print(os.Stdout)
 
 			log.Info("")

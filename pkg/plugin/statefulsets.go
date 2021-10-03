@@ -29,3 +29,27 @@ func stsInNamespace(clientset *kubernetes.Clientset, outputCh chan string, ctx c
 	outputCh <- fmt.Sprintf("Namespace %s", namespace)
 	return apps, nil
 }
+
+func stsAllNamespaces(clientset *kubernetes.Clientset, outputCh chan string, ctx context.Context, excludedNs []string) ([]AppVersion, error) {
+	apps := []AppVersion{}
+
+	namespaces, err := clientset.CoreV1().Namespaces().List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list namespaces: %w", err)
+	}
+
+	for _, namespace := range namespaces.Items {
+		if skipNamespace(namespace.Name, excludedNs) {
+			continue
+		}
+
+		app, err := stsInNamespace(clientset, outputCh, ctx, namespace.Name)
+		if err != nil {
+			return nil, fmt.Errorf("Error: %v", err)
+		}
+
+		apps = append(apps, app...)
+	}
+
+	return apps, nil
+}
